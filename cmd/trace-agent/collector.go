@@ -35,8 +35,14 @@ func newCollector(r *HTTPReceiver) http.Handler {
 		MaxSize: maxCacheSize,
 		Statsd:  statsd.Client,
 	})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/spans", c.handleSpans)
+	mux.HandleFunc("/cache", c.cache.ServeState)
+
 	go c.waitForTraces()
-	return c
+
+	return mux
 }
 
 func (c *collector) waitForTraces() {
@@ -73,7 +79,7 @@ func (c *collector) handleEvictedTrace(et *collect.EvictedTrace) {
 	c.receiver.traces <- et.Trace
 }
 
-func (c *collector) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (c *collector) handleSpans(w http.ResponseWriter, req *http.Request) {
 	if req.Method != "POST" {
 		w.WriteHeader(http.StatusNotFound)
 		return

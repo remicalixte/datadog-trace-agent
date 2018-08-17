@@ -109,7 +109,7 @@ func (r *HTTPReceiver) Run() {
 	http.HandleFunc("/v0.4/traces", r.httpHandleWithVersion(v04, r.handleTraces))
 	http.HandleFunc("/v0.4/services", r.httpHandleWithVersion(v04, r.handleServices))
 
-	http.Handle("/v1/spans", newCollector(r))
+	http.Handle("/v1/", http.StripPrefix("/v1", newCollector(r)))
 
 	// expvar implicitely publishes "/debug/vars" on the same port
 	addr := fmt.Sprintf("%s:%d", r.conf.ReceiverHost, r.conf.ReceiverPort)
