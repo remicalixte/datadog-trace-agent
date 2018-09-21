@@ -3,6 +3,7 @@ package model
 const (
 	// TraceMetricsKey is a tag key which, if set to true,
 	// ensures all statistics are computed for this span.
+	// [FIXME] *not implemented yet*
 	TraceMetricsKey = "datadog.trace_metrics"
 
 	// This is a special metric, it's 1 if the span is top-level, 0 if not.

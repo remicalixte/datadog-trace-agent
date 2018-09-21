@@ -74,7 +74,7 @@ type AgentConfig struct {
 	// watchdog
 	MaxMemory        float64       // MaxMemory is the threshold (bytes allocated) above which program panics and exits, to be restarted
 	MaxCPU           float64       // MaxCPU is the max UserAvg CPU the program should consume
-	MaxConnections   int           // (deprecated) MaxConnections is the threshold (opened TCP connections) above which program panics and exits, to be restarted
+	MaxConnections   int           // MaxConnections is the threshold (opened TCP connections) above which program panics and exits, to be restarted
 	WatchdogInterval time.Duration // WatchdogInterval is the delay between 2 watchdog checks
 
 	// http/s proxying
@@ -165,22 +165,21 @@ func (c *AgentConfig) LoadYaml(path string) error {
 	return nil
 }
 
+// LoadEnv reads environment variable values into the config.
+func (c *AgentConfig) LoadEnv() { c.loadEnv() }
+
 // Validate validates if the current configuration is good for the agent to start with.
-func (c *AgentConfig) validate() error {
+func (c *AgentConfig) Validate() error {
 	if c.APIKey == "" {
 		return ErrMissingAPIKey
 	}
 	if c.Hostname == "" {
 		if err := c.acquireHostname(); err != nil {
-			return err
+			return ErrMissingHostname
 		}
 	}
 	return nil
 }
-
-// fallbackHostnameFunc specifies the function to use for obtaining the hostname
-// when it can not be obtained by any other means. It is replaced in tests.
-var fallbackHostnameFunc = os.Hostname
 
 // acquireHostname attempts to acquire a hostname for this configuration. It
 // tries to shell out to the infrastructure agent for this, if DD_AGENT_BIN is
@@ -206,31 +205,14 @@ func (c *AgentConfig) acquireHostname() error {
 	err := cmd.Run()
 	c.Hostname = strings.TrimSpace(out.String())
 	if err != nil || c.Hostname == "" {
-		c.Hostname, err = fallbackHostnameFunc()
-	}
-	if c.Hostname == "" {
-		err = ErrMissingHostname
+		c.Hostname, err = os.Hostname()
 	}
 	return err
 }
 
-// Load returns a new configuration based on the given path. The path must not necessarily exist
-// and a valid configuration can be returned based on defaults and environment variables. If a
-// valid configuration can not be obtained, an error is returned.
+// Load attempts to load the configuration from the given path. If it's not found
+// it returns an error and a default configuration.
 func Load(path string) (*AgentConfig, error) {
-	cfg, err := loadFile(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, err
-		}
-	} else {
-		log.Infof("Loaded configuration: %s", cfg.ConfigPath)
-	}
-	cfg.loadEnv()
-	return cfg, cfg.validate()
-}
-
-func loadFile(path string) (*AgentConfig, error) {
 	cfgPath := path
 	if cfgPath == flags.DefaultConfigPath && !osutil.Exists(cfgPath) && osutil.Exists(agent5Config) {
 		// attempting to load inexistent default path, but found existing Agent 5
