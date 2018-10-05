@@ -229,7 +229,68 @@ func TestProcess(t *testing.T) {
 		assert.EqualValues(t, 1, stats.TracesDropped)
 		assert.EqualValues(t, 2, stats.SpansDropped)
 	})
+
+	t.Run("Sampling", func(t *testing.T) {
+		agent, cancel := agentWithMockedSamplers()
+		defer cancel()
+
+		// TODO
+		span := &model.Span{
+			Resource: "SELECT name FROM people WHERE age = 42 AND extra = 55",
+			Type:     "sql",
+			Start:    time.Now().Add(-2 * time.Hour).UnixNano(),
+			Duration: (500 * time.Millisecond).Nanoseconds(),
+			Metrics:  map[string]float64{},
+		}
+		agent.Process(model.Trace{span, span})
+	})
 }
+
+func agentWithMockedSamplers() (agent *Agent, cancelFunc func()) {
+	cfg := config.New()
+	cfg.APIKey = "test"
+	ctx, cancel := context.WithCancel(context.Background())
+	agent = NewAgent(ctx, cfg)
+	agent.ErrorsScoreSampler = newMockSampler(sampler.ErrorsScoreEngineType)
+	agent.PrioritySampler = newMockSampler(sampler.PriorityEngineType)
+	agent.ScoreSampler = newMockSampler(sampler.NormalScoreEngineType)
+	return agent, cancel
+}
+
+var _ sampler.Engine = (*mockSamplerEngine)(nil)
+
+func newMockSampler(typ sampler.EngineType) *Sampler {
+	return &Sampler{
+		engine: &mockSamplerEngine{typ: typ},
+	}
+}
+
+// mockSamplerEngine implements a mock sampler.Engine which keeps track of
+// all Sample calls and their arguments.
+type mockSamplerEngine struct {
+	typ         sampler.EngineType
+	sampleCalls []*sampleArgs
+}
+
+type sampleArgs struct {
+	trace model.Trace
+	root  *model.Span
+	env   string
+}
+
+func (e *mockSamplerEngine) Sample(trace model.Trace, root *model.Span, env string) bool {
+	e.sampleCalls = append(e.sampleCalls, &sampleArgs{
+		trace: trace,
+		root:  root,
+		env:   env,
+	})
+	return true
+}
+
+func (mockSamplerEngine) GetState() interface{}         { return nil }
+func (e mockSamplerEngine) GetType() sampler.EngineType { return e.typ }
+func (mockSamplerEngine) Run()                          {}
+func (mockSamplerEngine) Stop()                         {}
 
 func BenchmarkAgentTraceProcessing(b *testing.B) {
 	c := config.New()
